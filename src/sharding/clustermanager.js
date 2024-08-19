@@ -31,12 +31,6 @@ class ClusterManager extends EventEmitter {
 					// maxConcurrent: 80 
 				}).start()
 
-				if (this.isMaster()) {
-					this.bucketLogger = setInterval(() => {
-						console.log(this.bucket.getState());
-					}, 5000);
-				}
-
         this.shardCount = options.shards || 'auto';
         this.firstShardID = options.firstShardID || 0;
         this.lastShardID = options.lastShardID || 0;
