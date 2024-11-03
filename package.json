@@ -7,7 +7,7 @@
     "asciiart-logo": "^0.2.6",
     "bucket-queue": "^1.0.1",
     "colors": "^1.1.2",
-    "eris": "github:ChristopherBThai/eris#ab3b3c644dc5c8e7b29ee37af7bc6fc97a2eb58f",
+    "eris": "github:ChristopherBThai/eris#afa3bcfa9c8a7126bbea91fee5f178a40d5f8dac",
     "fancy-log": "^1.3.0"
   },
   "devDependencies": {
