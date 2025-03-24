@@ -328,7 +328,17 @@ class ClusterManager extends EventEmitter {
 
                         let { method, url, auth, body, file, _route, short } = message;
 
-                        if (file && file.file) file.file = Buffer.from(file.file, 'base64');
+                        if (file) {
+                            if(Array.isArray(file)) {
+                                file.forEach((f) => {
+                                    if (f.file) {
+                                        f.file = Buffer.from(f.file, 'base64');
+                                    }
+                                });
+                            } else if (file.file) {
+                                file.file = Buffer.from(file.file, 'base64');
+                            }
+                        }
 
                         try {
 
