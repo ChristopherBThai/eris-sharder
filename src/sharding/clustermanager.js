@@ -6,7 +6,6 @@ const EventEmitter = require("events");
 const Eris = require("eris");
 const Queue = require("../utils/queue.js");
 const pkg = require("../../package.json")
-const BucketQueue = require("bucket-queue");
 
 /**
  * 
@@ -24,12 +23,6 @@ class ClusterManager extends EventEmitter {
      */
     constructor(token, mainFile, options) {
         super();
-
-				this.bucket = BucketQueue({
-					calls: 55,
-					perInterval: 500,
-					// maxConcurrent: 80 
-				}).start()
 
         this.shardCount = options.shards || 'auto';
         this.firstShardID = options.firstShardID || 0;
@@ -341,14 +334,7 @@ class ClusterManager extends EventEmitter {
                         }
 
                         try {
-
-                            if (url?.includes("/interactions/")) {
-                                response = await this.eris.requestHandler.request(method, url, auth, body, file, _route, short);
-                            } else {
-                                response = await this.bucket.add(() => {
-                                    return this.eris.requestHandler.request(method, url, auth, body, file, _route, short)
-                                })
-                            }
+                            response = await this.eris.requestHandler.request(method, url, auth, body, file, _route, short);
                         } catch (err) {
                             error = {
                                 code: err.code,
