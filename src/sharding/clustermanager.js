@@ -206,6 +206,12 @@ class ClusterManager extends EventEmitter {
         master.on('message', async (worker, message, handle) => {
             if (message.name) {
                 const clusterID = this.workers.get(worker.id);
+                let transaction;
+                if (message.traceParent) {
+                    transaction = apm.startTransaction(message.name, 'clustermanager', {
+                        childOf: message.traceParent
+                    });
+                }
 
                 switch (message.name) {
                     case "log":
@@ -319,7 +325,7 @@ class ClusterManager extends EventEmitter {
                         let response;
                         let error;
 
-                        let { method, url, auth, body, file, _route, short, traceParent } = message;
+                        let { method, url, auth, body, file, _route, short } = message;
 
                         if (file) {
                             if(Array.isArray(file)) {
@@ -332,13 +338,6 @@ class ClusterManager extends EventEmitter {
                                 file.file = Buffer.from(file.file, 'base64');
                             }
                         }
-                        let span;
-                        if (traceParent) {
-                            const span = apm.startSpan(method, 'request', {
-                                childOf: traceParent
-                            });
-                        }
-
                         try {
                             response = await this.eris.requestHandler.request(method, url, auth, body, file, _route, short);
                         } catch (err) {
@@ -348,8 +347,6 @@ class ClusterManager extends EventEmitter {
                                 message: err.message,
                                 stack: err.stack
                             };
-                        } finally {
-                            span && span.end();
                         }
 
                         if (error) {
@@ -360,6 +357,7 @@ class ClusterManager extends EventEmitter {
 
                         break;
                 }
+                transaction?.end();
             }
         });
 
