@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const apm = require('elastic-apm-node');
 
 class SyncedRequestHandler {
     constructor(ipc, options) {
@@ -11,10 +12,11 @@ class SyncedRequestHandler {
             let stackCapture = new Error().stack;
 
             let requestID = crypto.randomBytes(16).toString('hex');
+            let traceParent = apm.currentTraceparent;
 
             if (file && file.file) file.file = Buffer.from(file.file).toString('base64');
 
-            process.send({ name: 'apiRequest', requestID, method, url, auth, body, file, _route, short });
+            process.send({ name: 'apiRequest', requestID, method, url, auth, body, file, _route, short, traceParent });
 
             let timeout = setTimeout(() => {
                 reject(new Error(`Request timed out (>${this.timeout}ms) on ${method} ${url}`));

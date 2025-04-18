@@ -6,6 +6,7 @@ const EventEmitter = require("events");
 const Eris = require("eris");
 const Queue = require("../utils/queue.js");
 const pkg = require("../../package.json")
+const apm = require('elastic-apm-node');
 
 /**
  * 
@@ -299,7 +300,6 @@ class ClusterManager extends EventEmitter {
                         this.callbacks.set(message.memberID, clusterID);
                         break;
                     case "fetchReturn":
-                        console.log(message);
                         let callback = this.callbacks.get(message.value.id);
 
                         let cluster = this.clusters.get(callback);
@@ -319,7 +319,7 @@ class ClusterManager extends EventEmitter {
                         let response;
                         let error;
 
-                        let { method, url, auth, body, file, _route, short } = message;
+                        let { method, url, auth, body, file, _route, short, traceParent } = message;
 
                         if (file) {
                             if(Array.isArray(file)) {
@@ -332,15 +332,24 @@ class ClusterManager extends EventEmitter {
                                 file.file = Buffer.from(file.file, 'base64');
                             }
                         }
+                        let span;
+                        if (traceParent) {
+                            const span = apm.startSpan(method, 'request', {
+                                childOf: traceParent
+                            });
+                        }
 
                         try {
                             response = await this.eris.requestHandler.request(method, url, auth, body, file, _route, short);
                         } catch (err) {
+                            apm.captureError(err);
                             error = {
                                 code: err.code,
                                 message: err.message,
                                 stack: err.stack
                             };
+                        } finally {
+                            span && span.end();
                         }
 
                         if (error) {
