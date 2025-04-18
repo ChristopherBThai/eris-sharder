@@ -7,7 +7,7 @@
     "asciiart-logo": "^0.2.6",
     "colors": "^1.1.2",
     "elastic-apm-node": "^4.11.2",
-    "eris": "github:ChristopherBThai/eris#29d2368098ca25681ed6ebd1977884c6212229d3",
+    "eris": "github:ChristopherBThai/eris#e698a03a45c8d4145136d622075023060f6c61ff",
     "fancy-log": "^1.3.0"
   },
   "devDependencies": {
