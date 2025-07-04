@@ -55,6 +55,7 @@ class ClusterManager extends EventEmitter {
 
 
         this.clientOptions = options.clientOptions || {};
+        this.restOptions = options.restOptions || {};
 
 
         if (options.stats === true) {
@@ -73,7 +74,7 @@ class ClusterManager extends EventEmitter {
         }
 
         if (this.token) {
-            this.eris = new Eris(token);
+            this.eris = new Eris(token, { rest: this.restOptions });
             this.launch(false);
         } else {
             throw new Error("No token provided");
