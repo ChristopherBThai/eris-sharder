@@ -4,7 +4,6 @@ const apm = require('elastic-apm-node');
 class SyncedRequestHandler {
     constructor(ipc, options) {
         this.ipc = ipc;
-        this.timeout = options.timeout + 1000;
     }
 
 		request (method, url, auth, body, file, _route, short) {
@@ -18,12 +17,6 @@ class SyncedRequestHandler {
 
             process.send({ name: 'apiRequest', requestID, method, url, auth, body, file, _route, short, traceParent });
 
-            let timeout = setTimeout(() => {
-                reject(new Error(`Request timed out (>${this.timeout}ms) on ${method} ${url}`));
-
-                this.ipc.unregister(`apiResponse.${requestID}`);
-            }, this.timeout);
-
             this.ipc.register(`apiResponse.${requestID}`, data => {
                 if (data.err) {
                     let error = new Error(data.err.message);
@@ -36,7 +29,6 @@ class SyncedRequestHandler {
                     resolve(data.data);
                 }
 
-                clearTimeout(timeout);
                 this.ipc.unregister(`apiResponse.${requestID}`);
             });
         });
