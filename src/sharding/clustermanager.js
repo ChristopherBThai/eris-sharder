@@ -7,6 +7,8 @@ const Eris = require("eris");
 const Queue = require("../utils/queue.js");
 const pkg = require("../../package.json")
 const apm = require('elastic-apm-node');
+const { AsyncResource } = require('async_hooks');
+const { performance } = require('perf_hooks');
 
 /**
  * 
@@ -207,6 +209,15 @@ class ClusterManager extends EventEmitter {
         master.on('message', async (worker, message, handle) => {
             if (message.name) {
                 const clusterID = this.workers.get(worker.id);
+                if (message.name === 'apiRequest') {
+                    const scope = new AsyncResource('discord.masterRequest');
+                    try {
+                        await scope.runInAsyncScope(() => this.#handleAPIRequest(clusterID, message));
+                    } finally {
+                        scope.emitDestroy();
+                    }
+                    return;
+                }
                 let transaction;
                 if (message.traceParent) {
                     transaction = apm.startTransaction(message.name, 'clustermanager', {
@@ -322,41 +333,7 @@ class ClusterManager extends EventEmitter {
                     case "send":
                         this.sendTo(message.cluster, message.msg)
                         break;
-                    case "apiRequest":
-                        let response;
-                        let error;
 
-                        let { method, url, auth, body, file, _route, short } = message;
-
-                        if (file) {
-                            if(Array.isArray(file)) {
-                                file.forEach((f) => {
-                                    if (f.file) {
-                                        f.file = Buffer.from(f.file, 'base64');
-                                    }
-                                });
-                            } else if (file.file) {
-                                file.file = Buffer.from(file.file, 'base64');
-                            }
-                        }
-                        try {
-                            response = await this.eris.requestHandler.request(method, url, auth, body, file, _route, short);
-                        } catch (err) {
-                            apm.captureError(err);
-                            error = {
-                                code: err.code,
-                                message: err.message,
-                                stack: err.stack
-                            };
-                        }
-
-                        if (error) {
-                            this.sendTo(clusterID, { _eventName: `apiResponse.${message.requestID}`, err: error })
-                        } else {
-                            this.sendTo(clusterID, { _eventName: `apiResponse.${message.requestID}`, data: response });
-                        }
-
-                        break;
                 }
                 transaction?.end();
             }
@@ -378,6 +355,51 @@ class ClusterManager extends EventEmitter {
                 master.workers[cluster.workerID].send(item.value);
             }
         });
+    }
+
+    async #handleAPIRequest(clusterID, message) {
+        const validParent = typeof message.traceParent === 'string' &&
+            /^00-(?!0{32}-)[0-9a-f]{32}-(?!0{16}-)[0-9a-f]{16}-[0-9a-f]{2}$/.test(message.traceParent);
+        const transaction = apm.startTransaction('discord.request', 'clustermanager',
+            validParent ? { childOf: message.traceParent } : {});
+        transaction?.setLabel('parent_context', validParent ? 'present' : message.traceParent ? 'invalid' : 'missing');
+        transaction?.setLabel('method', /^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/.test(message.method) ? message.method : 'other');
+        transaction?.setLabel('route_family', /^\/(channels|guilds|interactions|webhooks)(?:\/|$)/.exec(message.url)?.[1] || 'other');
+        const started = performance.now();
+        let response;
+        let error;
+        try {
+            try {
+                const { method, url, auth, body, file, _route, short } = message;
+                if (file) {
+                    for (const f of Array.isArray(file) ? file : [file]) {
+                        if (f.file) f.file = Buffer.from(f.file, 'base64');
+                    }
+                }
+                response = await this.eris.requestHandler.request(method, url, auth, body, file, _route, short);
+                transaction?.setOutcome('success');
+            } catch (err) {
+                transaction?.setOutcome('failure');
+                apm.captureError(err);
+                error = { code: err.code, message: err.message, stack: err.stack };
+            }
+            // Reply delivery is distinct from the actual Discord result. The worker
+            // may already have timed out; do not cancel or end transport early.
+            try {
+                this.sendTo(clusterID, error
+                    ? { _eventName: `apiResponse.${message.requestID}`, err: error }
+                    : { _eventName: `apiResponse.${message.requestID}`, data: response });
+                transaction?.setLabel('reply_handoff', 'attempted');
+            } catch (err) {
+                transaction?.setLabel('reply_handoff', 'failed');
+                apm.captureError(err);
+            }
+        } finally {
+            if (Number.isFinite(message.callerBudget) && message.callerBudget >= 0) {
+                transaction?.setLabel('caller_budget_exceeded', performance.now() - started > message.callerBudget);
+            }
+            transaction?.end();
+        }
     }
 
     chunk(shards, clusterCount) {
