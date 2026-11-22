@@ -64,7 +64,7 @@ class Cluster {
         });
 
         process.on('unhandledRejection', (reason, p) => {
-            process.send({ name: "error", msg: `Unhandled rejection at: Promise  ${p} reason:  ${reason.stack}` });
+            process.send({ name: "error", msg: `Unhandled rejection at: Promise  ${p} reason:  ${reason && reason.stack || inspect(reason)}` });
         });
 
 
